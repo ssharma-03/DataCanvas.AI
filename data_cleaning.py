@@ -1,15 +1,17 @@
+#Data_cleaning.py
+
 import pandas as pd
 import numpy as np
 from typing import Tuple, Dict, Any
 import logging
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(_name_)
 
 class DataCleaner:
     """Class for cleaning and preprocessing data"""
     
-    def __init__(self):
+    def _init_(self):
         self.original_df = None
         self.cleaned_df = None
         self.cleaning_report = {}
@@ -61,6 +63,32 @@ class DataCleaner:
             logger.error(f"Error in clean_data: {str(e)}")
             raise ValueError(f"Error cleaning data: {str(e)}")
 
+    # Public interface methods
+    def remove_duplicates(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Public method to remove duplicates from a dataframe"""
+        return self.clean_data(df, ["Remove duplicates"])[0]
+
+    def handle_missing_values(self, df: pd.DataFrame, strategy: str = 'auto') -> pd.DataFrame:
+        """Public method to handle missing values"""
+        self.missing_strategy = strategy
+        return self.clean_data(df, ["Handle missing values"])[0]
+
+    def remove_outliers(self, df: pd.DataFrame, method: str = 'zscore', threshold: float = 3.0) -> pd.DataFrame:
+        """Public method to remove outliers"""
+        self.outlier_method = method
+        self.outlier_threshold = threshold
+        return self.clean_data(df, ["Remove outliers"])[0]
+
+    def handle_outliers(self, df: pd.DataFrame, method: str = 'zscore', threshold: float = 3.0) -> pd.DataFrame:
+        """Alias for remove_outliers method"""
+        return self.remove_outliers(df, method, threshold)
+
+    def normalize_data(self, df: pd.DataFrame, method: str = 'standard') -> pd.DataFrame:
+        """Public method to normalize data"""
+        self.normalization_method = method
+        return self.clean_data(df, ["Normalize data"])[0]
+
+    # Private implementation methods
     def _remove_duplicates(self) -> None:
         """Remove duplicate rows"""
         try:
@@ -80,9 +108,10 @@ class DataCleaner:
             logger.error(f"Error removing duplicates: {str(e)}")
             raise
 
-    def _handle_missing_values(self, strategy: str = 'auto') -> None:
+    def _handle_missing_values(self) -> None:
         """Handle missing values in the dataset"""
         try:
+            strategy = getattr(self, 'missing_strategy', 'auto')
             missing_report = {}
             
             for column in self.cleaned_df.columns:
@@ -97,30 +126,19 @@ class DataCleaner:
                     
                     if strategy == 'auto':
                         if pd.api.types.is_numeric_dtype(self.cleaned_df[column]):
-                            # For numeric columns
                             if missing_count / len(self.cleaned_df) < 0.05:
-                                # Less than 5% missing - use mean
-                                self.cleaned_df[column].fillna(
-                                    self.cleaned_df[column].mean(), 
-                                    inplace=True
-                                )
+                                self.cleaned_df[column].fillna(self.cleaned_df[column].mean(), inplace=True)
                                 missing_report[column]['strategy_used'] = 'mean'
                             else:
-                                # More than 5% missing - use median
-                                self.cleaned_df[column].fillna(
-                                    self.cleaned_df[column].median(), 
-                                    inplace=True
-                                )
+                                self.cleaned_df[column].fillna(self.cleaned_df[column].median(), inplace=True)
                                 missing_report[column]['strategy_used'] = 'median'
                         else:
-                            # For non-numeric columns, use mode
                             mode_value = self.cleaned_df[column].mode()
                             if not mode_value.empty:
                                 self.cleaned_df[column].fillna(mode_value[0], inplace=True)
                                 missing_report[column]['strategy_used'] = 'mode'
                     
-                    missing_report[column]['remaining_missing'] = \
-                        self.cleaned_df[column].isnull().sum()
+                    missing_report[column]['remaining_missing'] = self.cleaned_df[column].isnull().sum()
             
             self.cleaning_report['operations']['missing_values'] = missing_report
             
@@ -128,9 +146,11 @@ class DataCleaner:
             logger.error(f"Error handling missing values: {str(e)}")
             raise
 
-    def _handle_outliers(self, method: str = 'zscore', threshold: float = 3.0) -> None:
+    def _handle_outliers(self) -> None:
         """Handle outliers in numeric columns"""
         try:
+            method = getattr(self, 'outlier_method', 'zscore')
+            threshold = getattr(self, 'outlier_threshold', 3.0)
             outliers_report = {}
             numeric_columns = self.cleaned_df.select_dtypes(include=['int64', 'float64']).columns
             
@@ -159,7 +179,6 @@ class DataCleaner:
                         'threshold': threshold
                     }
                     
-                    # Replace outliers with column median
                     self.cleaned_df.loc[outliers, column] = self.cleaned_df[column].median()
             
             self.cleaning_report['operations']['outliers'] = outliers_report
@@ -168,9 +187,10 @@ class DataCleaner:
             logger.error(f"Error handling outliers: {str(e)}")
             raise
 
-    def _normalize_data(self, method: str = 'standard') -> None:
+    def _normalize_data(self) -> None:
         """Normalize numeric columns"""
         try:
+            method = getattr(self, 'normalization_method', 'standard')
             normalize_report = {}
             numeric_columns = self.cleaned_df.select_dtypes(include=['int64', 'float64']).columns
             
@@ -182,15 +202,8 @@ class DataCleaner:
                 else:
                     raise ValueError(f"Unsupported normalization method: {method}")
                 
-                # Store original statistics
                 original_stats = self.cleaned_df[numeric_columns].describe()
-                
-                # Apply normalization
-                self.cleaned_df[numeric_columns] = scaler.fit_transform(
-                    self.cleaned_df[numeric_columns]
-                )
-                
-                # Store normalized statistics
+                self.cleaned_df[numeric_columns] = scaler.fit_transform(self.cleaned_df[numeric_columns])
                 normalized_stats = self.cleaned_df[numeric_columns].describe()
                 
                 normalize_report = {

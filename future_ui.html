@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Data Canvas</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    @keyframes blink {
+      0%, 100% { transform: scaleY(1); }
+      50% { transform: scaleY(0.1); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    @keyframes rotate {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes dataFlow {
+      0% { stroke-dashoffset: 1000; }
+      100% { stroke-dashoffset: 0; }
+    }
+
+    .robot-icon {
+      width: 80px;
+      height: 80px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 50;
+    }
+
+    .robot-icon:hover {
+      transform: scale(1.05);
+      filter: brightness(1.1);
+    }
+
+    .chatbot-popup {
+      position: fixed;
+      bottom: 110px;
+      right: 20px;
+      width: 320px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      padding: 20px;
+      animation: slideUp 0.3s ease;
+      z-index: 50;
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .eye {
+      transition: all 0.1s ease-in-out;
+    }
+
+    .top-icon-pupil,
+    .chatbot-pupil {
+      transition: transform 0.1s ease-in-out;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-gray-900 text-white relative">
+  <div id="root"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/17.0.2/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/17.0.2/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@lucide/lucide-react@6.12.0/umd/lucide-react.production.min.js"></script>
+  <script type="module">
+    import { createRoot } from 'https://esm.sh/react-dom@17.0.2/client';
+    import { useState, useEffect, useRef } from 'https://esm.sh/react@17.0.2';
+    import { MoreHorizontal, Paperclip, ChevronDown } from 'https://esm.sh/lucide-react@6.12.0';
+
+    function DropdownMenu({ children }) {
+      return <div className="relative">{children}</div>;
+    }
+
+    function DropdownMenuTrigger({ children, asChild }) {
+      return asChild ? children : <button>{children}</button>;
+    }
+
+    function DropdownMenuContent({ children }) {
+      return (
+        <div className="absolute mt-2 bg-white border border-gray-200 rounded-lg shadow-lg">
+          {children}
+        </div>
+      );
+    }
+
+    function DropdownMenuItem({ children }) {
+      return (
+        <div className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-gray-800">
+          {children}
+        </div>
+      );
+    }
+
+    function Input({ type, placeholder, className }) {
+      return <input type={type} placeholder={placeholder} className={className} />;
+    }
+
+    function Button({ variant, size, className, children, onClick }) {
+      const classes = `px-4 py-2 rounded ${variant === "ghost" ? "bg-transparent border border-white" : "bg-blue-500 text-white"} ${size === "icon" ? "p-2" : ""} ${className}`;
+      return <button className={classes} onClick={onClick}>{children}</button>;
+    }
+
+    function DataCanvas() {
+      const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+      const [isChatOpen, setIsChatOpen] = useState(false);
+      const topIconRef = useRef(null);
+      const chatbotRef = useRef(null);
+
+      useEffect(() => {
+        const handleMouseMove = (event) => {
+          const { clientX, clientY } = event;
+          setMousePosition({ x: clientX, y: clientY });
+
+          const updateEyes = (ref, className) => {
+            if (ref.current) {
+              const rect = ref.current.getBoundingClientRect();
+              const centerX = rect.left + rect.width / 2;
+              const centerY = rect.top + rect.height / 2;
+              const angle = Math.atan2(clientY - centerY, clientX - centerX);
+              const distance = Math.min(5, Math.sqrt(Math.pow(clientX - centerX, 2) + Math.pow(clientY - centerY, 2)) / 10);
+              const x = Math.cos(angle) * distance;
+              const y = Math.sin(angle) * distance;
+
+              const pupils = ref.current.querySelectorAll(className);
+              pupils.forEach((pupil) => {
+                pupil.style.transform = `translate(${x}px, ${y}px)`;
+              });
+            }
+          };
+
+          updateEyes(topIconRef, '.top-icon-pupil');
+          updateEyes(chatbotRef, '.chatbot-pupil');
+        };
+
+        window.addEventListener("mousemove", handleMouseMove);
+        return () => window.removeEventListener("mousemove", handleMouseMove);
+      }, []);
+
+      return (
+        <div className="min-h-screen bg-gray-900 text-white relative p-4">
+          {/* Top Menu */}
+          <div className="fixed top-4 left-4">
+            <Button variant="ghost" size="icon">
+              <MoreHorizontal className="w-5 h-5" />
+            </Button>
+          </div>
+
+          {/* Main Content */}
+          <div className="max-w-3xl mx-auto pt-20 px-4 space-y-8">
+            {/* Top Center Icon with Moving Eyes */}
+            <div className="flex justify-center mb-8">
+              <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg" ref={topIconRef}>
+                <circle cx="30" cy="30" r="29" fill="#333333" stroke="#4A4A4A" strokeWidth="2"/>
+                <g className="eyes">
+                  <circle cx="20" cy="30" r="6" fill="white" className="eye"/>
+                  <circle cx="40" cy="30" r="6" fill="white" className="eye"/>
+                  <circle cx="20" cy="30" r="3" fill="#333333" className="top-icon-pupil"/>
+                  <circle cx="40" cy="30" r="3" fill="#333333" className="top-icon-pupil"/>
+                </g>
+              </svg>
+            </div>
+
+            {/* Logo and Title */}
+            <div className="flex flex-col items-center justify-center space-y-2">
+              <div className="flex items-center gap-4">
+                <img
+                  src="/placeholder.svg?height=40&width=40"
+                  alt="Data Canvas Logo"
+                  className="w-10 h-10"
+                />
+                <h1 className="text-4xl font-bold tracking-tight text-white">DATA CANVAS</h1>
+              </div>
+              <p className="text-sm text-gray-400 uppercase tracking-widest">WHERE DATA MEETS CREATIVITY</p>
+            </div>
+
+            {/* Insights Hub Dropdown */}
+            <div className="flex justify-center mb-4">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="flex items-center gap-2">
+                    <span className="text-green-500">▶▶</span>
+                    Insights Hub
+                    <ChevronDown className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem>Data Analysis and Storytelling</DropdownMenuItem>
+                  <DropdownMenuItem>Infographic Generator</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative">
+              <Input
+                type="text"
+                placeholder="Ask a question..."
+                className="w-full px-4 py-6 bg-neutral-800/50 rounded-lg pr-12 focus:outline-none focus:ring-2 focus:ring-white/20"
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-3 top-1/2 -translate-y-1/2"
+              >
+                <Paperclip className="w-5 h-5" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Vizzy Chatbot */}
+          <div className="robot-icon" onClick={() => setIsChatOpen(!isChatOpen)}>
+            <svg width="80" height="80" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" ref={chatbotRef}>
+              <defs>
+                <linearGradient id="robotGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" style={{ stopColor: '#2193b0' }}/>
+                  <stop offset="100%" style={{ stopColor: '#6dd5ed' }}/>
+                </linearGradient>
+                <pattern id="circuitPattern" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+                  <path d="M 5 5 L 15 5 L 15 15 L 5 15 Z"
+                        fill="none"
+                        stroke="rgba(255,255,255,0.2)"
+                        strokeWidth="1"/>
+                </pattern>
+              </defs>
+
+              <rect x="20" y="20" width="60" height="60" rx="10"
+                    fill="url(#robotGradient)"/>
+              <rect x="20" y="20" width="60" height="60" rx="10"
+                    fill="url(#circuitPattern)" opacity="0.5"/>
+
+              <g className="eyes">
+                <circle cx="35" cy="40" r="6" fill="white" className="eye"/>
+                <circle cx="65" cy="40" r="6" fill="white" className="eye"/>
+                <circle cx="35" cy="40" r="3" fill="#2193b0" className="chatbot-pupil"/>
+                <circle cx="65" cy="40" r="3" fill="#2193b0" className="chatbot-pupil"/>
+              </g>
+
+              <g className="antenna">
+                <line x1="50" y1="15" x2="50" y2="20"
+                      stroke="white" strokeWidth="2"/>
+                <circle cx="50" cy="12" r="3" fill="white">
+                  <animate attributeName="opacity"
+                           values="0.5;1;0.5"
+                           dur="1s"
+                           repeatCount="indefinite"/>
+                </circle>
+              </g>
+            </svg>
+          </div>
+
+          {isChatOpen && (
+            <div className="chatbot-popup">
+              <h3 className="text-black font-bold mb-2">Data Analysis Bot</h3>
+              <p className="text-gray-600">I can help you analyze and visualize your data. What would you like to explore?</p>
+            </div>
+          )}
+
+          {/* Footer */}
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 text-white/60 text-sm">
+            © 2024 DataCanvas by TechTitans. All rights reserved.
+          </div>
+        </div>
+      );
+    }
+
+    // Render the React component
+    const root = createRoot(document.getElementById('root'));
+    root.render(React.createElement(DataCanvas));
+  </script>
+</body>
+</html>
+

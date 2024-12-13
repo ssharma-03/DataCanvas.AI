@@ -14,7 +14,7 @@ import io
 import tempfile
 
 class PresentationGenerator:
-    def _init_(self, style=None):
+    def __init__(self, style=None):
         self.style = style or {
             'background': '#ffffff',
             'text': '#000000',

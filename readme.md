@@ -1,4 +1,4 @@
-# Data Analysis Suite 📊
+# Data Canvas 📊
 
 A comprehensive data analysis and visualization tool built with Streamlit that provides interactive data analysis, visualization, and content generation capabilities.
 
@@ -57,8 +57,8 @@ A comprehensive data analysis and visualization tool built with Streamlit that p
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/data-analysis-suite.git
-cd data-analysis-suite
+git clone https://github.com/ssharma-03/DataCanvas.AI.git
+cd datacanvas
 ```
 
 2. Create and activate a virtual environment:
@@ -183,8 +183,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 For support:
 - Create an issue in the repository
-- Contact: your.email@example.com
-- Documentation: [Wiki Link]
+- Contact: sharmasomyamhs@gmail.com
 
 ## 🔄 Updates
 

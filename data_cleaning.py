@@ -6,12 +6,12 @@ from typing import Tuple, Dict, Any
 import logging
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
-logger = logging.getLogger(_name_)
+logger = logging.getLogger(__name__)
 
 class DataCleaner:
     """Class for cleaning and preprocessing data"""
     
-    def _init_(self):
+    def __init__(self):
         self.original_df = None
         self.cleaned_df = None
         self.cleaning_report = {}

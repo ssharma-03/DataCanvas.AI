@@ -1,3 +1,5 @@
+#App.py
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -48,17 +50,44 @@ def initialize_session_state():
     if 'initialized' not in st.session_state:
         st.session_state.initialized = True
         st.session_state.data_processor = DataProcessor()
-        st.session_state.visualizer = None  # Will be initialized with style
-        st.session_state.animation_generator = None  # Will be initialized with style
+        st.session_state.visualizer = None
+        st.session_state.animation_generator = None
         st.session_state.data_cleaner = DataCleaner()
         st.session_state.video_generator = VideoGenerator()
-        st.session_state.presentation_generator = PresentationGenerator()  # Add presentation generator
+        st.session_state.presentation_generator = PresentationGenerator()
+        # Add new session state variables for file handling
+        st.session_state.uploaded_file = None
+        st.session_state.processed_data = None
         try:
             api_key = os.getenv('GROQ_API_KEY')
             st.session_state.analyzer = TextAnalyzer(api_key)
         except Exception as e:
             st.error(f"Error initializing Text Analyzer: {e}")
             st.session_state.analyzer = None
+
+def handle_file_upload():
+    """Handle file upload and store in session state"""
+    uploaded_file = st.file_uploader(
+        "Upload your data file:",
+        type=['csv', 'xlsx', 'xls']
+    )
+
+    if uploaded_file is not None and (
+        st.session_state.uploaded_file is None or 
+        uploaded_file.name != st.session_state.uploaded_file.name
+    ):
+        try:
+            # Process new file
+            df = st.session_state.data_processor.read_file(uploaded_file)
+            if df is not None:
+                st.session_state.uploaded_file = uploaded_file
+                st.session_state.processed_data = df
+                return True
+        except Exception as e:
+            st.error(f"Error processing file: {str(e)}")
+            return False
+    
+    return st.session_state.processed_data is not None
 
 def display_home():
     """Display home page content"""
@@ -67,32 +96,32 @@ def display_home():
     Welcome to the comprehensive Data Analysis Suite! This tool combines multiple powerful features:
 
     ### 🔍 Available Tools:
-    1. **Data Analysis**
+    1. *Data Analysis*
        - Upload and analyze your data
        - Generate interactive visualizations
        - Create detailed reports
 
-    2. **Text Analysis**
+    2. *Text Analysis*
        - Extract insights from text
        - Generate visualizations from textual data
        - AI-powered analysis
 
-    3. **Animation Generator**
+    3. *Animation Generator*
        - Create animated data visualizations
        - Export as videos
        - Multiple style options
 
-    4. **Video Generator**
+    4. *Video Generator*
        - Create professional data visualization videos
        - Multiple chart types and animations
        - Custom styling and branding
 
-    5. **Presentation Generator**
+    5. *Presentation Generator*
        - Create PowerPoint presentations
        - Include charts and statistics
        - Professional formatting
 
-    6. **Data Cleaning**
+    6. *Data Cleaning*
        - Clean and preprocess your data
        - Handle missing values
        - Standardize formats
@@ -108,164 +137,125 @@ def display_presentation_generator(style: dict):
     """Display presentation generator page"""
     st.title("📊 Presentation Generator")
     
-    uploaded_file = st.file_uploader(
-        "Upload your data file:",
-        type=['csv', 'xlsx', 'xls']
-    )
+    if handle_file_upload():
+        df = st.session_state.processed_data
+        st.write("### Data Preview")
+        st.dataframe(df.head())
 
-    if uploaded_file:
-        try:
-            df = st.session_state.data_processor.read_file(uploaded_file)
-            if df is not None:
-                st.write("### Data Preview")
-                st.dataframe(df.head())
-
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    numeric_cols = df.select_dtypes(include=[np.number]).columns
-                    selected_cols = st.multiselect(
-                        "Select columns for analysis",
-                        numeric_cols
-                    )
-                    
-                    presentation_title = st.text_input(
-                        "Presentation Title",
-                        "Data Analysis Report"
-                    )
-                    
-                    company_name = st.text_input(
-                        "Company Name (optional)",
-                        ""
-                    )
-                
-                with col2:
-                    selected_charts = st.multiselect(
-                        "Select Chart Types",
-                        list(CHART_TYPES.keys()),
-                        default=['Line Plot', 'Bar Chart']
-                    )
-                    
-                    include_stats = st.checkbox(
-                        "Include Statistical Summary",
-                        value=True
-                    )
-                    
-                    include_conclusions = st.checkbox(
-                        "Include Conclusions",
-                        value=True
-                    )
-
-                if selected_cols and selected_charts:
-                    if st.button("Generate Presentation"):
-                        with st.spinner("Creating presentation..."):
-                            try:
-                                # Update style
-                                st.session_state.presentation_generator.update_style(style)
-                                
-                                # Generate presentation
-                                pptx_bytes = st.session_state.presentation_generator.create_presentation(
-                                    df[selected_cols],
-                                    selected_cols,
-                                    selected_charts,
-                                    title=presentation_title,
-                                    company_name=company_name,
-                                    include_stats=include_stats,
-                                    include_conclusions=include_conclusions
-                                )
-                                
-                                if pptx_bytes:
-                                    st.success("✨ Presentation generated successfully!")
-                                    
-                                    st.download_button(
-                                        "⬇️ Download Presentation",
-                                        data=pptx_bytes,
-                                        file_name=f"{presentation_title.lower().replace(' ', '_')}.pptx",
-                                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                                    )
-                                else:
-                                    st.error("Failed to generate presentation")
-                                    
-                            except Exception as e:
-                                st.error(f"Error generating presentation: {str(e)}")
-                                st.exception(e)
-                else:
-                    st.warning("Please select at least one column and one chart type")
-                    
-        except Exception as e:
-            st.error(f"Error processing file: {str(e)}")
-            st.exception(e)
-    
-    else:
-        st.info("""
-            👋 Welcome to the Presentation Generator!
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            numeric_cols = df.select_dtypes(include=[np.number]).columns
+            selected_cols = st.multiselect(
+                "Select columns for analysis",
+                numeric_cols
+            )
             
-            This tool helps you create professional presentations with:
-            - Multiple chart types
-            - Statistical analysis
-            - Custom styling and branding
-            - Comprehensive insights
+            presentation_title = st.text_input(
+                "Presentation Title",
+                "Data Analysis Report"
+            )
             
-            To get started:
-            1. Upload your data file (CSV or Excel)
-            2. Select columns to analyze
-            3. Choose your preferred chart types
-            4. Configure presentation settings
-            5. Generate your presentation!
-        """)
+            company_name = st.text_input(
+                "Company Name (optional)",
+                ""
+            )
+        
+        with col2:
+            selected_charts = st.multiselect(
+                "Select Chart Types",
+                list(CHART_TYPES.keys()),
+                default=['Line Plot', 'Bar Chart']
+            )
+            
+            include_stats = st.checkbox(
+                "Include Statistical Summary",
+                value=True
+            )
+            
+            include_conclusions = st.checkbox(
+                "Include Conclusions",
+                value=True
+            )
 
+        if selected_cols and selected_charts:
+            if st.button("Generate Presentation"):
+                with st.spinner("Creating presentation..."):
+                    try:
+                        # Update style
+                        st.session_state.presentation_generator.update_style(style)
+                        
+                        # Generate presentation
+                        pptx_bytes = st.session_state.presentation_generator.create_presentation(
+                            df[selected_cols],
+                            selected_cols,
+                            selected_charts,
+                            title=presentation_title,
+                            company_name=company_name,
+                            include_stats=include_stats,
+                            include_conclusions=include_conclusions
+                        )
+                        
+                        if pptx_bytes:
+                            st.success("✨ Presentation generated successfully!")
+                            
+                            st.download_button(
+                                "⬇ Download Presentation",
+                                data=pptx_bytes,
+                                file_name=f"{presentation_title.lower().replace(' ', '_')}.pptx",
+                                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                            )
+                        else:
+                            st.error("Failed to generate presentation")
+                            
+                    except Exception as e:
+                        st.error(f"Error generating presentation: {str(e)}")
+                        st.exception(e)
+        else:
+            st.warning("Please select at least one column and one chart type")
+            
 def display_data_analysis(style: dict):
     """Display data analysis page"""
     st.title("📊 Data Analysis")
     
-    uploaded_file = st.file_uploader(
-        "Upload your data file:",
-        type=['csv', 'xlsx', 'xls']
-    )
+    if handle_file_upload():
+        df = st.session_state.processed_data
+        st.write("### Data Preview")
+        st.dataframe(df.head())
 
-    if uploaded_file:
-        try:
-            df = st.session_state.data_processor.read_file(uploaded_file)
-            if df is not None:
-                st.write("### Data Preview")
-                st.dataframe(df.head())
+        # Analysis options
+        analysis_type = st.selectbox(
+            "Choose analysis type:",
+            ["Statistical Summary", "Correlation Analysis", "Distribution Analysis"]
+        )
 
-                # Analysis options
-                analysis_type = st.selectbox(
-                    "Choose analysis type:",
-                    ["Statistical Summary", "Correlation Analysis", "Distribution Analysis"]
+        if analysis_type == "Statistical Summary":
+            st.write("### Statistical Summary")
+            st.write(df.describe())
+
+        elif analysis_type == "Correlation Analysis":
+            st.write("### Correlation Analysis")
+            numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
+            if len(numeric_cols) > 1:
+                correlation_matrix = df[numeric_cols].corr()
+                fig = st.session_state.visualizer.create_visualization(
+                    correlation_matrix,
+                    'Heatmap',
+                    "Correlation Matrix"
                 )
+                st.plotly_chart(fig)
+            else:
+                st.warning("Need at least two numeric columns for correlation analysis")
 
-                if analysis_type == "Statistical Summary":
-                    st.write("### Statistical Summary")
-                    st.write(df.describe())
-
-                elif analysis_type == "Correlation Analysis":
-                    st.write("### Correlation Analysis")
-                    numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
-                    if len(numeric_cols) > 1:
-                        correlation_matrix = df[numeric_cols].corr()
-                        fig = st.session_state.visualizer.create_visualization(
-                            correlation_matrix,
-                            'Heatmap',
-                            "Correlation Matrix"
-                        )
-                        st.plotly_chart(fig)
-                    else:
-                        st.warning("Need at least two numeric columns for correlation analysis")
-
-                elif analysis_type == "Distribution Analysis":
-                    st.write("### Distribution Analysis")
-                    selected_column = st.selectbox("Select column:", df.columns)
-                    fig = st.session_state.visualizer.create_visualization(
-                        df[[selected_column]],
-                        'Box Plot',
-                        f"Distribution of {selected_column}"
-                    )
-                    st.plotly_chart(fig)
-
-        except Exception as e:
-            st.error(f"Error in data analysis: {str(e)}")
+        elif analysis_type == "Distribution Analysis":
+            st.write("### Distribution Analysis")
+            selected_column = st.selectbox("Select column:", df.columns)
+            fig = st.session_state.visualizer.create_visualization(
+                df[[selected_column]],
+                'Box Plot',
+                f"Distribution of {selected_column}"
+            )
+            st.plotly_chart(fig)
 
 def display_text_analysis(style: dict):
     """Display text analysis page"""
@@ -321,217 +311,168 @@ def display_animation_generator(style: dict):
     """Display animation generator page"""
     st.title("🎬 Animation Generator")
     
-    uploaded_file = st.file_uploader(
-        "Upload your data file:",
-        type=['csv', 'xlsx', 'xls']
-    )
+    if handle_file_upload():
+        df = st.session_state.processed_data
+        st.write("### Data Preview")
+        st.dataframe(df.head())
 
-    if uploaded_file:
-        try:
-            df = st.session_state.data_processor.read_file(uploaded_file)
-            if df is not None:
-                st.write("### Data Preview")
-                st.dataframe(df.head())
+        # Animation options
+        numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
+        selected_cols = st.multiselect(
+            "Select columns for animation:",
+            numeric_cols,
+            default=list(numeric_cols)[:2] if len(numeric_cols) >= 2 else []
+        )
 
-                # Animation options
-                numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
-                selected_cols = st.multiselect(
-                    "Select columns for animation:",
-                    numeric_cols,
-                    default=list(numeric_cols)[:2] if len(numeric_cols) >= 2 else []
-                )
+        if selected_cols:
+            chart_type = st.selectbox(
+                "Select chart type:",
+                ["Line Plot", "Bar Chart", "Scatter Plot"]
+            )
 
-                if selected_cols:
-                    chart_type = st.selectbox(
-                        "Select chart type:",
-                        ["Line Plot", "Bar Chart", "Scatter Plot"]
-                    )
+            fps = st.slider(
+                "Frames per second:",
+                min_value=1,
+                max_value=60,
+                value=30
+            )
 
-                    fps = st.slider(
-                        "Frames per second:",
-                        min_value=1,
-                        max_value=60,
-                        value=30
-                    )
-
-                    if st.button("Generate Animation"):
-                        with st.spinner("Creating animation..."):
-                            try:
-                                animation = st.session_state.animation_generator.create_animation(
-                                    df[selected_cols],
-                                    chart_type,
-                                    fps=fps
-                                )
-                                if animation:
-                                    st.success("Animation created successfully!")
-                                    st.image(animation)
-                            except Exception as e:
-                                st.error(f"Error creating animation: {str(e)}")
-
-        except Exception as e:
-            st.error(f"Error processing file: {str(e)}")
+            if st.button("Generate Animation"):
+                with st.spinner("Creating animation..."):
+                    try:
+                        animation = st.session_state.animation_generator.create_animation(
+                            df[selected_cols],
+                            chart_type,
+                            fps=fps
+                        )
+                        if animation:
+                            st.success("Animation created successfully!")
+                            st.image(animation)
+                    except Exception as e:
+                        st.error(f"Error creating animation: {str(e)}")
 
 def display_video_generator(style: dict):
     """Display video generator page"""
     st.title("🎥 Video Generator")
     
-    uploaded_file = st.file_uploader(
-        "Upload your data file:",
-        type=['csv', 'xlsx', 'xls']
-    )
+    if handle_file_upload():
+        df = st.session_state.processed_data
+        st.write("### Data Preview")
+        st.dataframe(df.head())
 
-    if uploaded_file:
-        try:
-            df = st.session_state.data_processor.read_file(uploaded_file)
-            if df is not None:
-                st.write("### Data Preview")
-                st.dataframe(df.head())
-
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    numeric_cols = df.select_dtypes(include=[np.number]).columns
-                    selected_cols = st.multiselect(
-                        "Select columns for visualization",
-                        numeric_cols
-                    )
-                    
-                    video_title = st.text_input(
-                        "Video Title",
-                        "Data Analysis Report"
-                    )
-                    
-                    company_name = st.text_input(
-                        "Company Name (optional)",
-                        ""
-                    )
-                
-                with col2:
-                    selected_charts = st.multiselect(
-                        "Select Chart Types",
-                        list(CHART_TYPES.keys()),
-                        default=['Line Plot', 'Bar Chart']
-                    )
-                    
-                    quality = st.select_slider(
-                        "Video Quality",
-                        options=['low', 'medium', 'high'],
-                        value='medium'
-                    )
-
-                if selected_cols and selected_charts:
-                    if st.button("Generate Video"):
-                        with st.spinner("Creating video..."):
-                            try:
-                                # Update settings
-                                st.session_state.video_generator.update_settings(
-                                    style=style,
-                                    quality=quality
-                                )
-                                
-                                # Generate video
-                                video_bytes = st.session_state.video_generator.create_video(
-                                    df[selected_cols],
-                                    selected_cols,
-                                    selected_charts,
-                                    title=video_title,
-                                    company_name=company_name
-                                )
-                                
-                                if video_bytes:
-                                    st.success("✨ Video generated successfully!")
-                                    st.video(video_bytes)
-                                    
-                                    st.download_button(
-                                        "⬇️ Download Video",
-                                        data=video_bytes,
-                                        file_name=f"{video_title.lower().replace(' ', '_')}.mp4",
-                                        mime="video/mp4"
-                                    )
-                                else:
-                                    st.error("Failed to generate video")
-                                    
-                            except Exception as e:
-                                st.error(f"Error generating video: {str(e)}")
-                                st.exception(e)
-                else:
-                    st.warning("Please select at least one column and one chart type")
-                    
-        except Exception as e:
-            st.error(f"Error processing file: {str(e)}")
-            st.exception(e)
-    
-    else:
-        st.info("""
-            👋 Welcome to the Video Generator!
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            numeric_cols = df.select_dtypes(include=[np.number]).columns
+            selected_cols = st.multiselect(
+                "Select columns for visualization",
+                numeric_cols
+            )
             
-            This tool helps you create professional data visualization videos with:
-            - Multiple chart types and animations
-            - Custom styling and branding
-            - Statistical insights
-            - High-quality exports
+            video_title = st.text_input(
+                "Video Title",
+                "Data Analysis Report"
+            )
             
-            To get started:
-            1. Upload your data file (CSV or Excel)
-            2. Select columns to visualize
-            3. Choose your preferred chart types
-            4. Configure video settings
-            5. Generate your video!
-        """)
+            company_name = st.text_input(
+                "Company Name (optional)",
+                ""
+            )
+        
+        with col2:
+            selected_charts = st.multiselect(
+                "Select Chart Types",
+                list(CHART_TYPES.keys()),
+                default=['Line Plot', 'Bar Chart']
+            )
+            
+            quality = st.select_slider(
+                "Video Quality",
+                options=['low', 'medium', 'high'],
+                value='medium'
+            )
 
+        if selected_cols and selected_charts:
+            if st.button("Generate Video"):
+                with st.spinner("Creating video..."):
+                    try:
+                        # Update settings
+                        st.session_state.video_generator.update_settings(
+                            style=style,
+                            quality=quality
+                        )
+                        
+                        # Generate video
+                        video_bytes = st.session_state.video_generator.create_video(
+                            df[selected_cols],
+                            selected_cols,
+                            selected_charts,
+                            title=video_title,
+                            company_name=company_name
+                        )
+                        
+                        if video_bytes:
+                            st.success("✨ Video generated successfully!")
+                            st.video(video_bytes)
+                            
+                            st.download_button(
+                                "⬇ Download Video",
+                                data=video_bytes,
+                                file_name=f"{video_title.lower().replace(' ', '_')}.mp4",
+                                mime="video/mp4"
+                            )
+                        else:
+                            st.error("Failed to generate video")
+                            
+                    except Exception as e:
+                        st.error(f"Error generating video: {str(e)}")
+                        st.exception(e)
+        else:
+            st.warning("Please select at least one column and one chart type")
+            
 def display_data_cleaning():
     """Display data cleaning page"""
     st.title("🧹 Data Cleaning")
     
-    uploaded_file = st.file_uploader(
-        "Upload your data file:",
-        type=['csv', 'xlsx', 'xls']
-    )
+    if handle_file_upload():
+        df = st.session_state.processed_data
+        st.write("### Original Data Preview")
+        st.dataframe(df.head())
 
-    if uploaded_file:
-        try:
-            df = st.session_state.data_processor.read_file(uploaded_file)
-            if df is not None:
-                st.write("### Original Data Preview")
-                st.dataframe(df.head())
+        cleaning_options = st.multiselect(
+            "Select cleaning operations:",
+            ["Remove duplicates", "Handle missing values", "Remove outliers", "Normalize data"]
+        )
 
-                cleaning_options = st.multiselect(
-                    "Select cleaning operations:",
-                    ["Remove duplicates", "Handle missing values", "Remove outliers", "Normalize data"]
+        if st.button("Clean Data"):
+            with st.spinner("Cleaning data..."):
+                cleaned_df = df.copy()
+                
+                if "Remove duplicates" in cleaning_options:
+                    cleaned_df = st.session_state.data_cleaner.remove_duplicates(cleaned_df)
+                
+                if "Handle missing values" in cleaning_options:
+                    cleaned_df = st.session_state.data_cleaner.handle_missing_values(cleaned_df)
+                
+                if "Remove outliers" in cleaning_options:
+                    cleaned_df = st.session_state.data_cleaner.handle_outliers(cleaned_df)
+                
+                if "Normalize data" in cleaning_options:
+                    cleaned_df = st.session_state.data_cleaner.normalize_data(cleaned_df)
+
+                st.success("Data cleaned successfully!")
+                st.write("### Cleaned Data Preview")
+                st.dataframe(cleaned_df.head())
+
+                # Download cleaned data
+                csv = cleaned_df.to_csv(index=False)
+                st.download_button(
+                    "Download Cleaned Data",
+                    csv,
+                    "cleaned_data.csv",
+                    "text/csv",
+                    key='download-csv'
                 )
-
-                if st.button("Clean Data"):
-                    with st.spinner("Cleaning data..."):
-                        cleaned_df = df.copy()
-                        
-                        if "Remove duplicates" in cleaning_options:
-                            cleaned_df = st.session_state.data_cleaner.remove_duplicates(cleaned_df)
-                        
-                        if "Handle missing values" in cleaning_options:
-                            cleaned_df = st.session_state.data_cleaner.handle_missing_values(cleaned_df)
-                        
-                        if "Remove outliers" in cleaning_options:
-                            cleaned_df = st.session_state.data_cleaner.handle_outliers(cleaned_df)
-                        
-                        if "Normalize data" in cleaning_options:
-                            cleaned_df = st.session_state.data_cleaner.normalize_data(cleaned_df)
-
-                        st.success("Data cleaned successfully!")
-                        st.write("### Cleaned Data Preview")
-                        st.dataframe(cleaned_df.head())
-
-                        # Download cleaned data
-                        csv = cleaned_df.to_csv(index=False)
-                        st.download_button(
-                            "Download Cleaned Data",
-                            csv,
-                            "cleaned_data.csv",
-                            "text/csv",
-                            key='download-csv'
-                        )
-
-        except Exception as e:
-            st.error(f"Error processing file: {str(e)}")
 
 def main():
     """Main application function"""
@@ -571,12 +512,12 @@ def main():
         page = st.radio(
             "Choose a tool:",
             ["Home", 
-             "Data Analysis", 
              "Text Analysis", 
+             "Data Cleaning",
+             "Data Analysis", 
              "Animation Generator",
-             "Video Generator",
              "Presentation Generator",
-             "Data Cleaning"]
+             "Video Generator"]
         )
 
         # Style selection

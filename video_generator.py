@@ -1,225 +1,227 @@
-presentation_generation.py 
-
-
-# presentation_generator.py
-import pandas as pd
-import numpy as np
+# video_generator.py
+import os
+import tempfile
+import subprocess
+from PIL import Image, ImageDraw, ImageFont
 import matplotlib.pyplot as plt
 import seaborn as sns
-from pptx import Presentation
-from pptx.util import Inches, Pt
-from pptx.dml.color import RGBColor
-from pptx.enum.text import PP_ALIGN
+import pandas as pd
+import numpy as np
 import io
-import tempfile
 
-class PresentationGenerator:
-    def _init_(self, style=None):
+class VideoGenerator:
+    """Class for generating data visualization videos"""
+     
+    def _init_(self, style: dict = None):
         self.style = style or {
-            'background': '#ffffff',
-            'text': '#000000',
-            'accent': '#2c3e50',
-            'font': 'arial'
+            'background': 'white',
+            'text': 'black',
+            'accent': '#1f77b4',
+            'font': 'arial.ttf'
         }
-        
-    def update_style(self, style):
-        """Update the presentation style"""
+        self.width = 1920
+        self.height = 1080
+        self.fps = 30
+        self.duration = 30
+        self.transition_duration = 2
+        self.include_stats = True
+        self.include_annotations = True
+        self.quality = 'medium'  # Add this line
+
+    def update_settings(self, fps=None, duration=None, transition_duration=None, 
+                       include_stats=None, include_annotations=None, style=None,quality=None):
+        """Update video generator settings"""
+        if fps is not None:
+            self.fps = fps
+        if duration is not None:
+            self.duration = duration
+        if transition_duration is not None:
+            self.transition_duration = transition_duration
+        if include_stats is not None:
+            self.include_stats = include_stats
+        if include_annotations is not None:
+            self.include_annotations = include_annotations
+        if style is not None:
+            self.style = style
+        if quality is not None:
+            self.quality = quality  # Add this line
+
+    def update_style(self, style: dict):
+        """Update visual style"""
         self.style = style
-        
-    def create_presentation(self, data, columns, selected_charts, title="Data Analysis Report", 
-                          company_name="", include_stats=True, include_conclusions=True):
-        """Create PowerPoint presentation with data analysis and charts"""
+
+    def create_video(self, data, columns, selected_charts, title, company_name="", 
+                    quality='medium', progress_callback=None):
+        """Create video from data visualization"""
         try:
-            prs = Presentation()
+            # Create temporary directory for frames
+            with tempfile.TemporaryDirectory() as temp_dir:
+                frames_path = os.path.join(temp_dir, 'frames')
+                os.makedirs(frames_path, exist_ok=True)
+                
+                frame_count = 0
+                total_frames = len(selected_charts) * 100  # 100 frames per chart
+                
+                # Title sequence
+                title_text = f"{title}\n{company_name}" if company_name else title
+                title_frame = self.create_frame(title_text)
+                if title_frame:
+                    frame_path = os.path.join(frames_path, f'frame_{frame_count:05d}.png')
+                    title_frame.save(frame_path, 'PNG')
+                    frame_count += 1
+                
+                # Generate frames for each chart
+                for chart_type in selected_charts:
+                    for i in range(100):
+                        if progress_callback:
+                            progress = (frame_count / total_frames)
+                            progress_callback(progress, f"Generating {chart_type} frames...")
+                        
+                        chart_frame = self.create_chart_frame(
+                            data, columns, chart_type, i
+                        )
+                        if chart_frame:
+                            frame_path = os.path.join(frames_path, f'frame_{frame_count:05d}.png')
+                            chart_frame.save(frame_path, 'PNG')
+                            frame_count += 1
+                
+                if frame_count > 0:
+                    # Set FFmpeg parameters based on quality
+                    if quality == 'high':
+                        preset = 'slow'
+                        crf = '18'
+                    elif quality == 'low':
+                        preset = 'ultrafast'
+                        crf = '28'
+                    else:  # medium
+                        preset = 'medium'
+                        crf = '23'
+                    
+                    output_path = os.path.join(temp_dir, 'output.mp4')
+                    
+                    # FFmpeg command
+                    command = [
+                        'ffmpeg', '-y',
+                        '-framerate', str(self.fps),
+                        '-i', os.path.join(frames_path, 'frame_%05d.png'),
+                        '-c:v', 'libx264',
+                        '-preset', preset,
+                        '-crf', crf,
+                        '-pix_fmt', 'yuv420p',
+                        output_path
+                    ]
+                    
+                    subprocess.run(command, check=True, 
+                                 stdout=subprocess.PIPE, 
+                                 stderr=subprocess.PIPE)
+                    
+                    # Read the generated video
+                    with open(output_path, 'rb') as f:
+                        return f.read()
+                
+                return None
+                
+        except Exception as e:
+            raise Exception(f"Error creating video: {str(e)}")
+
+    def create_frame(self, text: str) -> Image:
+        """Create a single frame with text"""
+        try:
+            frame = Image.new('RGB', (self.width, self.height), self.style['background'])
+            draw = ImageDraw.Draw(frame)
             
-            # Title slide
-            title_slide_layout = prs.slide_layouts[0]
-            slide = prs.slides.add_slide(title_slide_layout)
+            try:
+                font = ImageFont.truetype(self.style.get('font', 'arial.ttf'), 60)
+            except:
+                font = ImageFont.load_default()
             
-            # Set title
-            title_shape = slide.shapes.title
-            title_shape.text = title
+            # Split text into lines
+            lines = text.split('\n')
+            line_height = 70
+            total_height = len(lines) * line_height
+            current_y = (self.height - total_height) // 2
             
-            # Set subtitle if company name is provided
-            if company_name and len(slide.placeholders) > 1:
-                subtitle_shape = slide.placeholders[1]
-                subtitle_shape.text = company_name
-            
-            # Add content slides
-            self._add_overview_slide(prs, data, columns, selected_charts)
-            
-            if include_stats:
-                for col in columns:
-                    self._add_stats_slide(prs, data, col)
-            
-            for chart_type in selected_charts:
-                self._add_chart_slide(prs, data, columns, chart_type)
-            
-            if include_conclusions:
-                self._add_conclusions_slide(prs, data, columns)
-            
-            # Save to BytesIO
-            output = io.BytesIO()
-            prs.save(output)
-            output.seek(0)
-            
-            return output.getvalue()
+            for line in lines:
+                text_bbox = draw.textbbox((0, 0), line, font=font)
+                text_width = text_bbox[2] - text_bbox[0]
+                x = (self.width - text_width) // 2
+                draw.text((x, current_y), line, 
+                         font=font, fill=self.style['text'])
+                current_y += line_height
+                
+            return frame
             
         except Exception as e:
-            raise Exception(f"Error creating presentation: {str(e)}")
+            raise Exception(f"Error creating frame: {str(e)}")
 
-    def _add_overview_slide(self, prs, data, columns, selected_charts):
-        """Add overview slide to presentation"""
-        slide = prs.slides.add_slide(prs.slide_layouts[5])  # Using blank layout
-        
-        # Add title
-        title_box = slide.shapes.add_textbox(Inches(1), Inches(0.5), Inches(8), Inches(1))
-        title_frame = title_box.text_frame
-        title_frame.text = "Data Overview"
-        
-        # Add content
-        content_box = slide.shapes.add_textbox(Inches(1), Inches(1.5), Inches(8), Inches(5))
-        text_frame = content_box.text_frame
-        
-        p = text_frame.add_paragraph()
-        p.text = "Dataset Information:"
-        
-        p = text_frame.add_paragraph()
-        p.text = f"• Number of Variables: {len(columns)}"
-        
-        p = text_frame.add_paragraph()
-        p.text = f"• Total Records: {len(data)}"
-        
-        p = text_frame.add_paragraph()
-        p.text = f"• Time Period: {len(data)} points"
-        
-        p = text_frame.add_paragraph()
-        p.text = "\nVariables Analyzed:"
-        
-        for col in columns:
-            p = text_frame.add_paragraph()
-            p.text = f"• {col}"
-        
-        p = text_frame.add_paragraph()
-        p.text = "\nVisualizations Created:"
-        
-        for chart in selected_charts:
-            p = text_frame.add_paragraph()
-            p.text = f"• {chart}"
-
-    def _add_stats_slide(self, prs, data, column):
-        """Add statistical analysis slide for a column"""
-        slide = prs.slides.add_slide(prs.slide_layouts[5])  # Using blank layout
-        
-        # Add title
-        title_box = slide.shapes.add_textbox(Inches(1), Inches(0.5), Inches(8), Inches(1))
-        title_frame = title_box.text_frame
-        title_frame.text = f"{column} - Statistical Analysis"
-        
-        # Add content
-        content_box = slide.shapes.add_textbox(Inches(1), Inches(1.5), Inches(8), Inches(5))
-        text_frame = content_box.text_frame
-        
-        stats = data[column].describe()
-        change = ((data[column].iloc[-1] / data[column].iloc[0] - 1) * 100)
-        
-        p = text_frame.add_paragraph()
-        p.text = "Basic Statistics:"
-        
-        stats_items = [
-            f"• Mean: {stats['mean']:.2f}",
-            f"• Median: {data[column].median():.2f}",
-            f"• Standard Deviation: {stats['std']:.2f}",
-            f"• Minimum: {stats['min']:.2f}",
-            f"• Maximum: {stats['max']:.2f}",
-            "\nDistribution Analysis:",
-            f"• 25th Percentile: {stats['25%']:.2f}",
-            f"• 75th Percentile: {stats['75%']:.2f}",
-            f"• IQR: {(stats['75%'] - stats['25%']):.2f}",
-            "\nChange Analysis:",
-            f"• Total Change: {(data[column].iloc[-1] - data[column].iloc[0]):.2f}",
-            f"• Percentage Change: {change:.2f}%"
-        ]
-        
-        for item in stats_items:
-            p = text_frame.add_paragraph()
-            p.text = item
-
-    def _add_chart_slide(self, prs, data, columns, chart_type):
-        """Add visualization slide"""
-        slide = prs.slides.add_slide(prs.slide_layouts[5])  # Using blank layout
-        
-        # Add title
-        title_box = slide.shapes.add_textbox(Inches(1), Inches(0.5), Inches(8), Inches(1))
-        title_frame = title_box.text_frame
-        title_frame.text = f"{chart_type} Analysis"
-        
-        # Create chart
-        plt.figure(figsize=(10, 6))
-        plt.style.use('dark_background' if self.style['background'] == '#000000' else 'default')
-        
-        self._create_chart(data, columns, chart_type)
-        
-        # Save chart to bytes
-        img_stream = io.BytesIO()
-        plt.savefig(img_stream, format='png', 
-                   facecolor=self.style['background'],
-                   bbox_inches='tight',
-                   dpi=300)
-        plt.close()
-        
-        # Add chart to slide
-        img_stream.seek(0)
-        slide.shapes.add_picture(img_stream, Inches(1), Inches(2), width=Inches(8))
-
-    def _create_chart(self, data, columns, chart_type):
-        """Create specific chart type"""
-        if chart_type == 'Line Plot':
-            for col in columns:
-                plt.plot(range(len(data)), data[col], label=col, linewidth=2)
-        elif chart_type == 'Bar Chart':
-            data[columns].plot(kind='bar')
-        elif chart_type == 'Scatter Plot':
-            for col in columns:
-                plt.scatter(range(len(data)), data[col], label=col, alpha=0.7)
-        elif chart_type == 'Box Plot':
-            plt.boxplot([data[col] for col in columns], labels=columns)
-        elif chart_type == 'Violin Plot':
-            plt.violinplot([data[col] for col in columns])
-            plt.xticks(range(1, len(columns) + 1), columns)
-        elif chart_type == 'Heatmap':
-            sns.heatmap(data[columns].corr(), annot=True, cmap='coolwarm')
+    def create_chart_frame(self, data, columns, chart_type, frame_index):
+        """Create a frame with animated chart"""
+        try:
+            plt.clf()
+            plt.figure(figsize=(self.width/100, self.height/100), 
+                      dpi=100, facecolor=self.style['background'])
             
-        plt.title(chart_type)
-        plt.xlabel("Time Period")
-        plt.ylabel("Value")
-        if chart_type not in ['Heatmap', 'Box Plot', 'Violin Plot']:
+            # Calculate animation progress
+            progress = frame_index / 100
+            end_idx = max(2, int(len(data) * progress))
+            current_data = data.iloc[:end_idx]
+            
+            # Create chart based on type
+            if chart_type == 'Line Plot':
+                for col in columns:
+                    plt.plot(range(len(current_data)), current_data[col], 
+                            label=col, color=self.style['accent'])
+            elif chart_type == 'Bar Chart':
+                current_data[columns].plot(kind='bar', ax=plt.gca())
+            elif chart_type == 'Scatter Plot':
+                for col in columns:
+                    plt.scatter(range(len(current_data)), current_data[col], 
+                              label=col, color=self.style['accent'])
+            
+            plt.title(chart_type, color=self.style['text'])
+            plt.xlabel("Time", color=self.style['text'])
+            plt.ylabel("Value", color=self.style['text'])
             plt.legend()
-        plt.grid(True, alpha=0.3)
+            plt.grid(True, alpha=0.3)
+            
+            # Save frame to buffer
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', 
+                       facecolor=self.style['background'],
+                       bbox_inches='tight')
+            plt.close()
+            
+            # Convert buffer to image
+            buf.seek(0)
+            return Image.open(buf)
+            
+        except Exception as e:
+            raise Exception(f"Error creating chart frame: {str(e)}")
 
-    def _add_conclusions_slide(self, prs, data, columns):
-        """Add conclusions slide"""
-        slide = prs.slides.add_slide(prs.slide_layouts[5])  # Using blank layout
-        
-        # Add title
-        title_box = slide.shapes.add_textbox(Inches(1), Inches(0.5), Inches(8), Inches(1))
-        title_frame = title_box.text_frame
-        title_frame.text = "Key Findings"
-        
-        # Add content
-        content_box = slide.shapes.add_textbox(Inches(1), Inches(1.5), Inches(8), Inches(5))
-        text_frame = content_box.text_frame
-        
-        p = text_frame.add_paragraph()
-        p.text = "Summary:"
-        
-        p = text_frame.add_paragraph()
-        p.text = f"• Analyzed {len(columns)} variables over {len(data)} time points"
-        
-        p = text_frame.add_paragraph()
-        p.text = "\nKey Metrics:"
-        
-        for col in columns:
-            p = text_frame.add_paragraph()
-            p.text = (f"• {col}: Mean = {data[col].mean():.2f}, "
-                     f"Change = {((data[col].iloc[-1] / data[col].iloc[0] - 1) * 100):+.2f}%")
+    def create_thumbnail(self, video_bytes, title):
+        """Create video thumbnail"""
+        try:
+            # Create a simple thumbnail with title
+            img = Image.new('RGB', (1280, 720), self.style['background'])
+            draw = ImageDraw.Draw(img)
+            
+            try:
+                font = ImageFont.truetype(self.style.get('font', 'arial.ttf'), 60)
+            except:
+                font = ImageFont.load_default()
+            
+            # Draw title
+            text_bbox = draw.textbbox((0, 0), title, font=font)
+            text_width = text_bbox[2] - text_bbox[0]
+            x = (1280 - text_width) // 2
+            y = (720 - 60) // 2
+            draw.text((x, y), title, font=font, fill=self.style['text'])
+            
+            # Save thumbnail
+            buf = io.BytesIO()
+            img.save(buf, format='PNG')
+            buf.seek(0)
+            return buf.getvalue()
+            
+        except Exception as e:
+            raise Exception(f"Error creating thumbnail: {str(e)}")
